@@ -1,0 +1,12 @@
+[default]
+address = "0.0.0.0"
+limits = { forms = "64 kB", json = "1 MiB" }
+
+[debug]
+port = 8080
+
+[release]
+port = 9999
+
+[default.databases.diesel]
+url = "./db/db.sqlite"
