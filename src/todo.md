@@ -1,12 +1,13 @@
 各个模块
 -[ ] api doc
 -[ ] auth
--[ ] data model
+-[x] data model
 -[x] persist
 -[x] migration
 -[ ] log
 -[ ] test
 -[x] profiles
+-[x] cors
 
 写法
 - dto builder
@@ -33,6 +34,7 @@ POST api.nodeplus.io/contact_us
 request:
 {
 name: "my name",
+phone: "my phone",
 email:"my email address",
 message: "my message"
 }

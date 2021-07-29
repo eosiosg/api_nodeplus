@@ -12,7 +12,8 @@ mod service;
 async fn main() {
     if let Err(e) = rocket::build()
         .attach(controller::route())
-        .attach(service::cron())
+        .attach(controller::cors())
+        // .attach(service::cron())
         .launch()
         .await
     {

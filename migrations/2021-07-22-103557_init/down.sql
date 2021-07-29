@@ -1,2 +1,2 @@
 DROP TABLE contact_us;
-DROP TABLE stats;
+DROP TABLE chain_stat;

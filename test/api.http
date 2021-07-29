@@ -1,10 +1,10 @@
-POST http://localhost:8080/contact_us
+POST https://api.nodeplus.io/contact_us
 Content-Type: application/json
 
 {
   "name": "my name",
   "email":"my email address",
-  "message": "my message"
+  "phone": "dfa"
 }
 
 ###
