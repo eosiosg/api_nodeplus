@@ -12,7 +12,7 @@
 写法
 - dto builder
 - service fairing, replace request guard use db connector
-
+- cronjob: 1. contact us notification, 2. market price update
 
 api GET api.nodeplus.io/stats
 {

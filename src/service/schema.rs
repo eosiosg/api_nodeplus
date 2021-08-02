@@ -23,8 +23,8 @@ table! {
         phone -> Text,
         email -> Text,
         message -> Text,
-        status -> Nullable<Integer>,
-        created_at -> Nullable<Text>,
+        status -> Integer,
+        created_at -> Timestamp,
     }
 }
 

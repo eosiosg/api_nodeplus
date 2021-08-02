@@ -5,13 +5,17 @@ use super::schema::*;
 use crate::controller::request::contact_us_request::ContactUsRequest;
 use self::diesel::prelude::*;
 use chrono;
+use std::env;
+use dotenv::dotenv;
+use telegram_notifyrs;
+use std::fmt::Write;
+
 
 #[database("diesel")]
 pub struct Db(diesel::SqliteConnection);
 
 
-#[derive(Debug, Clone, Deserialize, Serialize, Queryable, Insertable)]
-#[serde(crate = "rocket::serde")]
+#[derive(Queryable, Insertable)]
 #[table_name = "contact_us"]
 pub struct ContactUs {
     id: Option<i32>,
@@ -20,6 +24,7 @@ pub struct ContactUs {
     email: String,
     message: String,
     status: i32,
+    created_at: chrono::NaiveDateTime,
 }
 
 #[derive(Queryable, Insertable)]
@@ -58,6 +63,7 @@ pub async fn save_contact_us(db: Db, request: ContactUsRequest) -> Result<(), St
         email: request.email,
         message: request.message,
         status: 0,
+        created_at: chrono::Utc::now().naive_utc()
     };
     if let Err(e) = db.run(move |conn| {
         diesel::insert_into(contact_us::table)
@@ -83,7 +89,7 @@ pub async fn get_stats(db: Db) -> Result<Stats, String> {
 
             let now = chrono::Utc::now().naive_utc();
 
-            for chain_stat in chain_stats{
+            for chain_stat in chain_stats {
                 //total_node_count
                 tmp_total_node_count += chain_stat.total_node_count * chain_stat.c;
                 //total_running_time
@@ -112,22 +118,35 @@ pub async fn get_stats(db: Db) -> Result<Stats, String> {
     }
 }
 
-// pub fn update_stats() {
-    // println!("work work");
-    // dotenv().ok();
-    // let database_url = env::var("DATABASE_URL")
-    //     .expect("DATABASE_URL must be set");
-    // let connection = SqliteConnection::establish(&database_url)
-    //     .expect(&format!("Error connecting to {}", database_url));
 
-    // let some_stats = stats::table.filter(stats::id.eq(1))
-    //     .limit(1)
-    //     .load::<Stats>(&connection)
-    //     .expect("error");
 
-    // if let Err(e) = diesel::update(stats::table.find(1))
-    //     .set(total_running_time.eq(total_running_time + 3752))
-    //     .execute(&connection) {
-    //     println!("{}", e);
-    // }
-// }
+pub async fn notify_contact_us(){
+    dotenv().ok();
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    let connection = SqliteConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url));
+
+    if let Ok(contact_us_records) = contact_us::table.filter(contact_us::status.eq(0))
+        .load::<ContactUs>(&connection) {
+        let mut msg = String::new();
+        let mut ids = Vec::new();
+        for r in contact_us_records{
+            ids.push(r.id.unwrap());
+            write!(&mut msg, "[name] {}\n[phone] {}\n[email] {}\n[message] {}\n[time] {}\n",r.name, r.phone,r.email, r.message,r.created_at).unwrap();
+        }
+
+        if ids.len() > 0 {
+            let token = env::var("TELEGRAM_BOT_TOKEN").expect("TELEGRAM_BOT_TOKEN not set");
+            let chat_id: i64 = env::var("TELEGRAM_CHAT_ID")
+                .expect("Missing TELEGRAM_CHAT_ID environment variable")
+                .parse()
+                .expect("Error parsing TELEGRAM_CHAT_ID as i64");
+            if telegram_notifyrs::send_message(msg, &token, chat_id).ok(){
+                let _ = diesel::update(contact_us::table.filter(contact_us::id.eq_any(ids)))
+                    .set(contact_us::status.eq(1))
+                    .execute(&connection);
+            }
+        }
+    }
+}

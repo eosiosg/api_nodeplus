@@ -13,7 +13,7 @@ async fn main() {
     if let Err(e) = rocket::build()
         .attach(controller::route())
         .attach(controller::cors())
-        // .attach(service::cron())
+        .attach(service::cron())
         .launch()
         .await
     {
