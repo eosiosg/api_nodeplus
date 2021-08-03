@@ -2,6 +2,7 @@ table! {
     chain_stat (id) {
         id -> Nullable<Integer>,
         chain -> Text,
+        symbol -> Text,
         k -> Double,
         c -> Double,
         past_total_assets -> Double,

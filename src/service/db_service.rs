@@ -32,6 +32,7 @@ pub struct ContactUs {
 pub struct ChainStat {
     id: Option<i32>,
     pub chain: String,
+    pub symbol: String,
     pub k: f64,
     pub c: f64,
     pub past_total_assets: f64,
@@ -63,7 +64,7 @@ pub async fn save_contact_us(db: Db, request: ContactUsRequest) -> Result<(), St
         email: request.email,
         message: request.message,
         status: 0,
-        created_at: chrono::Utc::now().naive_utc()
+        created_at: chrono::Utc::now().naive_utc(),
     };
     if let Err(e) = db.run(move |conn| {
         diesel::insert_into(contact_us::table)
@@ -119,8 +120,8 @@ pub async fn get_stats(db: Db) -> Result<Stats, String> {
 }
 
 
-
-pub async fn notify_contact_us(){
+pub async fn notify_contact_us() {
+    println!("[{}] notify_contact_us", chrono::Utc::now());
     dotenv().ok();
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
@@ -131,9 +132,9 @@ pub async fn notify_contact_us(){
         .load::<ContactUs>(&connection) {
         let mut msg = String::new();
         let mut ids = Vec::new();
-        for r in contact_us_records{
+        for r in contact_us_records {
             ids.push(r.id.unwrap());
-            write!(&mut msg, "[name] {}\n[phone] {}\n[email] {}\n[message] {}\n[time] {}\n",r.name, r.phone,r.email, r.message,r.created_at).unwrap();
+            write!(&mut msg, "[name] {}\n[phone] {}\n[email] {}\n[message] {}\n[time] {}\n", r.name, r.phone, r.email, r.message, r.created_at).unwrap();
         }
 
         if ids.len() > 0 {
@@ -142,10 +143,59 @@ pub async fn notify_contact_us(){
                 .expect("Missing TELEGRAM_CHAT_ID environment variable")
                 .parse()
                 .expect("Error parsing TELEGRAM_CHAT_ID as i64");
-            if telegram_notifyrs::send_message(msg, &token, chat_id).ok(){
+            if telegram_notifyrs::send_message(msg, &token, chat_id).ok() {
                 let _ = diesel::update(contact_us::table.filter(contact_us::id.eq_any(ids)))
                     .set(contact_us::status.eq(1))
                     .execute(&connection);
+            }
+        }
+    }
+}
+
+
+pub async fn update_market_price() {
+    //update one in order of market_price_time
+    let now = chrono::Utc::now();
+    println!("[{}] update_market_price", now);
+    dotenv().ok();
+    let api_key = env::var("COINMARKETCAP_API_KEY")
+        .expect("X-CMC_PRO_API_KEY must be set");
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set");
+    let connection = SqliteConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url));
+    if let Ok(chain_stat_wrapper) = chain_stat::table.order(chain_stat::market_price_time.asc())
+        .limit(1)
+        .load::<ChainStat>(&connection) {
+        for r in chain_stat_wrapper {
+            let request_url = format!("https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol={}&convert=USD", r.symbol);
+            if let Ok(resp) = reqwest::Client::new().get(request_url).header("X-CMC_PRO_API_KEY", &api_key).send().await {
+                if let Ok(d) = resp.json::<rocket::serde::json::serde_json::Value>().await
+                {
+                    let new_price = d.get("data")
+                        .and_then(|value| value.get(r.symbol.clone()))
+                        .and_then(|value| value.get("quote"))
+                        .and_then(|value| value.get("USD"))
+                        .and_then(|value| value.get("price"))
+                        .and_then(|value| value.as_f64());
+                    let new_market_price_time = d.get("data")
+                        .and_then(|value| value.get(r.symbol.clone()))
+                        .and_then(|value| value.get("quote"))
+                        .and_then(|value| value.get("USD"))
+                        .and_then(|value| value.get("last_updated"))
+                        .and_then(|value| value.as_str());
+
+                    if new_price.is_some() && new_market_price_time.is_some() {
+                        println!("[{}][update_market_price] market price for symbol [{}] price: {} last_updated: {}", now, r.symbol.clone(), new_price.unwrap(), new_market_price_time.unwrap());
+                        let _ = diesel::update(chain_stat::table.filter(chain_stat::id.eq(r.id.clone())))
+                            .set((
+                                chain_stat::market_price_usd.eq(new_price.unwrap()),
+                                chain_stat::market_price_time.eq(new_market_price_time.unwrap())))
+                            .execute(&connection);
+                    } else {
+                        println!("[{}][update_market_price] error request market price for symbol [{}]", now, r.symbol);
+                    }
+                }
             }
         }
     }
