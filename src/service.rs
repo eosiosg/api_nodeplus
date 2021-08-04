@@ -25,6 +25,7 @@ pub fn cron() -> AdHoc {
         }
 
         let mut cron_update_market_price = CronJob::new("cron service update market price",on_cron_update_market_price);
+        cron_update_market_price.seconds("0");
         cron_update_market_price.minutes("0");
         CronJob::start_job_threaded(cron_update_market_price);
     }))
